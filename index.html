@@ -2,35 +2,66 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 加入 viewport 讓手機瀏覽器正確縮放 -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>雷霆戰機 2D</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{background:#050814;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;color:#fff;user-select:none}
-  #wrap{position:relative}
-  canvas{display:block;background:#050814;border:2px solid #1e3a5f;border-radius:8px;box-shadow:0 0 30px rgba(0,150,255,.2)}
-  #ui{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;padding:10px 14px;font-size:18px;font-weight:bold;pointer-events:none;text-shadow:0 0 8px #000}
-  #score{color:#00ffcc}
-  #hp{color:#ff5577}
-  #overlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(0,0,10,.78);border-radius:8px;text-align:center}
-  #overlay.hidden{display:none}
-  #overlay h1{font-size:48px;color:#ff3344;margin-bottom:10px;letter-spacing:4px;text-shadow:0 0 20px #ff0033}
-  #overlay p{font-size:20px;margin:6px 0;color:#cfefff}
-  #restartBtn{margin-top:18px;padding:12px 32px;font-size:20px;font-weight:bold;background:#00aaff;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:.2s}
-  #restartBtn:hover{background:#00ccff;transform:scale(1.05)}
-  #hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:13px;color:#5a7a9a;pointer-events:none}
+  body{background:#050814;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;color:#fff;user-select:none; overflow: hidden;}
+  #wrap{position:relative; width: 100vw; height: 100vh; max-width: 480px; max-height: 640px; display: flex; justify-content: center; align-items: center;}
+  
+  /* RWD 響應式畫布設定 */
+  canvas{
+    display:block;
+    background:#050814;
+    border:2px solid #1e3a5f;
+    border-radius:8px;
+    box-shadow:0 0 30px rgba(0,150,255,.2);
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  
+  #ui{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;padding:10px 14px;font-size:18px;font-weight:bold;pointer-events:none;text-shadow:0 0 8px #000; z-index: 10;}
+  #score{color:#00ffcc; display: none;} /* 遊戲開始前先隱藏 */
+  #hp{color:#ff5577; display: none;} /* 遊戲開始前先隱藏 */
+  
+  #overlay, #startOverlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(0,0,10,.78);border-radius:8px;text-align:center; z-index: 20;}
+  #overlay.hidden, #startOverlay.hidden{display:none}
+  
+  h1{font-size:48px;color:#ff3344;margin-bottom:10px;letter-spacing:4px;text-shadow:0 0 20px #ff0033}
+  #startOverlay h1 { color: #00e5ff; text-shadow:0 0 20px #0088aa; }
+  
+  p{font-size:20px;margin:6px 0;color:#cfefff}
+  
+  .btn{margin-top:18px;padding:12px 32px;font-size:20px;font-weight:bold;background:#00aaff;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:.2s}
+  .btn:hover{background:#00ccff;transform:scale(1.05)}
+  
+  #hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:13px;color:#5a7a9a;pointer-events:none; z-index: 10;}
 </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="game" width="480" height="640"></canvas>
   <div id="ui"><div id="score">SCORE: 0</div><div id="hp">HP: 100</div></div>
+  
+  <!-- 新增的開始畫面 -->
+  <div id="startOverlay">
+    <h1>雷霆戰機</h1>
+    <p style="font-size:15px;color:#8aa">準備好出擊了嗎？</p>
+    <button id="startBtn" class="btn">開始遊戲</button>
+  </div>
+
+  <!-- 原本的結束畫面 -->
   <div id="overlay" class="hidden">
     <h1>GAME OVER</h1>
     <p id="finalScore">最終分數: 0</p>
     <p style="font-size:15px;color:#8aa">按 R 鍵 或 點擊按鈕重新開始</p>
-    <button id="restartBtn">重新開始 (R)</button>
+    <button id="restartBtn" class="btn">重新開始 (R)</button>
   </div>
+  
   <div id="hint">方向鍵 / WASD 移動 &nbsp;|&nbsp; 空格 發射</div>
 </div>
 <script>
@@ -40,12 +71,15 @@ const W = canvas.width, H = canvas.height;
 const scoreEl = document.getElementById('score');
 const hpEl = document.getElementById('hp');
 const overlay = document.getElementById('overlay');
+const startOverlay = document.getElementById('startOverlay');
 const finalScoreEl = document.getElementById('finalScore');
 const restartBtn = document.getElementById('restartBtn');
+const startBtn = document.getElementById('startBtn');
 
 let keys = {};
 let player, bullets, enemies, particles, scoreTexts, stars;
 let score, hp, gameOver, enemyTimer, elapsed, shootCooldown;
+let gameStarted = false; // 新增遊戲狀態變數
 
 function initStars(){
   stars = [];
@@ -53,6 +87,23 @@ function initStars(){
     stars.push({x:Math.random()*W, y:Math.random()*H, s:Math.random()*2+0.5, v:Math.random()*30+10, tw:Math.random()*Math.PI*2});
   }
 }
+
+// 初始設定（只畫星星背景）
+function init(){
+  initStars();
+  drawBackgroundOnly(); 
+}
+
+function startGame(){
+  gameStarted = true;
+  startOverlay.classList.add('hidden');
+  scoreEl.style.display = 'block';
+  hpEl.style.display = 'block';
+  reset();
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
 function reset(){
   player = {x:W/2, y:H-80, w:36, h:28, speed:320};
   bullets = []; enemies = []; particles = []; scoreTexts = [];
@@ -121,8 +172,21 @@ function endGame(){
   finalScoreEl.textContent = '最終分數: ' + score;
   overlay.classList.remove('hidden');
 }
+
+// 開始畫面專用的背景渲染
+function drawBackgroundOnly() {
+    ctx.fillStyle='#050814'; ctx.fillRect(0,0,W,H);
+    for(let s of stars){
+        const a = 0.4 + 0.6*Math.abs(Math.sin(s.tw));
+        ctx.globalAlpha=a; ctx.fillStyle='#ffffff';
+        ctx.fillRect(s.x,s.y,s.s,s.s);
+    }
+    ctx.globalAlpha=1;
+}
+
 let lastTime = 0;
 function loop(t){
+  if(!gameStarted) return; // 如果還沒開始就不跑遊戲迴圈
   requestAnimationFrame(loop);
   const dt = Math.min((t-lastTime)/1000 || 0, 0.05);
   lastTime = t;
@@ -241,11 +305,17 @@ window.addEventListener('keydown', e=>{
 });
 window.addEventListener('keyup', e=>{ keys[e.key]=false; });
 restartBtn.addEventListener('click', reset);
+startBtn.addEventListener('click', startGame); // 綁定開始按鈕
+
 // touch support
 let touchX=null, touchY=null, touching=false;
-canvas.addEventListener('touchstart', e=>{ touching=true; const t=e.touches[0]; const r=canvas.getBoundingClientRect(); touchX=t.clientX-r.left; touchY=t.clientY-r.top; keys[' ']=true; },{passive:true});
+canvas.addEventListener('touchstart', e=>{ 
+    if(!gameStarted) return;
+    touching=true; const t=e.touches[0]; const r=canvas.getBoundingClientRect(); 
+    touchX=t.clientX-r.left; touchY=t.clientY-r.top; keys[' ']=true; 
+},{passive:true});
 canvas.addEventListener('touchmove', e=>{
-  if(!touching) return;
+  if(!touching || !gameStarted) return;
   const t=e.touches[0]; const r=canvas.getBoundingClientRect();
   const nx=(t.clientX-r.left)*(W/r.width); const ny=(t.clientY-r.top)*(H/r.height);
   player.x += (nx-player.x)*0.3; player.y += (ny-player.y)*0.3;
@@ -253,9 +323,7 @@ canvas.addEventListener('touchmove', e=>{
 },{passive:false});
 canvas.addEventListener('touchend', ()=>{ touching=false; keys[' ']=false; });
 
-initStars();
-reset();
-requestAnimationFrame(loop);
+init(); // 執行初始設定（顯示背景）
 </script>
 </body>
 </html>
